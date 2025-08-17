@@ -209,7 +209,7 @@
                         const grantStatus = {};
                         grantSnapshot.forEach(doc => {
                             const data = doc.data();
-                            grantStatus[data.status] = (grantStatus[g.status] || 0) + 1;
+                            grantStatus[data.status] = (grantStatus[data.status] || 0) + 1;
                         });
                         renderSimpleChart('grant-status-chart', grantStatus);
 
@@ -219,7 +219,7 @@
                             const data = doc.data();
                             const logItem = document.createElement('div');
                             logItem.className = 'border-b border-gray-200 pb-2 last:border-b-0';
-                            logItem.textContent = `${new Date(data.timestamp.toDate()).toLocaleString()} - ${data.action} by User ${data.userId.substring(0, 8)}...`;
+                            logItem.textContent = `${new Date(data.timestamp.toDate()).toLocaleString()} - ${data.action} by User ${data.userId ? data.userId.substring(0, 8) + '...' : 'Unknown'}`;
                             auditLogList.appendChild(logItem);
                         });
 
@@ -242,14 +242,18 @@
                 const colors = ['bg-blue-500', 'bg-green-500', 'bg-red-500', 'bg-yellow-500'];
                 let colorIndex = 0;
 
+                const barsContainer = document.createElement('div');
+                barsContainer.className = 'flex w-full h-full';
+
                 for (const key in data) {
                     const bar = document.createElement('div');
                     const percentage = (data[key] / total) * 100;
-                    bar.className = `h-full ${colors[colorIndex % colors.length]} rounded-md mr-1 transition-all duration-500`;
+                    bar.className = `h-full ${colors[colorIndex % colors.length]} transition-all duration-500`;
                     bar.style.width = `${percentage}%`;
-                    chartElement.appendChild(bar);
+                    barsContainer.appendChild(bar);
                     colorIndex++;
                 }
+                chartElement.appendChild(barsContainer);
 
                 const legend = document.createElement('div');
                 legend.className = 'mt-2 text-xs';
