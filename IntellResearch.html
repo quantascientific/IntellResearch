@@ -35,6 +35,7 @@
                 <button id="grants-btn" class="text-blue-600 hover:text-blue-800 font-semibold hidden">Grants</button>
                 <button id="mou-btn" class="text-blue-600 hover:text-blue-800 font-semibold hidden">Partnerships</button>
                 <button id="mobility-btn" class="text-blue-600 hover:text-blue-800 font-semibold hidden">Mobility</button>
+                <button id="users-btn" class="text-blue-600 hover:text-blue-800 font-semibold hidden">Users</button>
                 <span id="user-info-text" class="text-gray-600 font-semibold hidden"></span>
                 <button id="logout-btn" class="text-red-600 hover:text-red-800 font-semibold hidden">Logout</button>
             </nav>
@@ -92,12 +93,13 @@
             function updateNav(isLoggedIn, role = null) {
                 const navButtons = ['dashboard-btn', 'projects-btn', 'grants-btn', 'mou-btn', 'mobility-btn'];
                 const roleBasedItems = {
-                    'Admin': ['dashboard-btn', 'projects-btn', 'grants-btn', 'mou-btn', 'mobility-btn'],
-                    'Staff': ['dashboard-btn', 'projects-btn', 'grants-btn', 'mou-btn', 'mobility-btn'],
+                    'Admin': [...navButtons, 'users-btn'],
+                    'Staff': navButtons,
                     'Researcher': ['dashboard-btn', 'projects-btn', 'grants-btn'],
                 };
 
-                navButtons.forEach(btnId => document.getElementById(btnId).classList.add('hidden'));
+                // Hide all navigation buttons by default
+                document.querySelectorAll('#nav-container button').forEach(btn => btn.classList.add('hidden'));
                 document.getElementById('logout-btn').classList.toggle('hidden', !isLoggedIn);
                 document.getElementById('user-info-text').classList.toggle('hidden', !isLoggedIn);
                 
