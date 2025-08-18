@@ -984,30 +984,29 @@
                 const tableBody = document.getElementById('projects-report-table-body');
                 tableBody.innerHTML = '<tr><td colspan="5" class="text-center py-4">Loading reports...</td></tr>';
                 try {
-                    // Fetch all projects
-                    const projectsSnapshot = await db.collection(`/artifacts/${appId}/public/data/projects`).get();
+                    // Fetch all projects and grants in a single pass to be efficient
+                    const [projectsSnapshot, rolesSnapshot, grantsSnapshot] = await Promise.all([
+                        db.collection(`/artifacts/${appId}/public/data/projects`).get(),
+                        db.collectionGroup('roles').get(),
+                        db.collection(`/artifacts/${appId}/public/data/grants`).get()
+                    ]);
+
                     const projects = projectsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-                    // Fetch all roles to map user IDs to emails
-                    const rolesSnapshot = await db.collectionGroup('roles').get();
-                    const userEmailMap = {};
+                    // Map user IDs to their details (email)
+                    const userDetailsMap = {};
                     rolesSnapshot.forEach(doc => {
                         const userData = doc.data();
-                        userEmailMap[doc.id] = userData.email || 'Email not available';
+                        userDetailsMap[doc.id] = { email: userData.email, role: userData.role };
                     });
 
-                    // Fetch all grants and calculate total per user
-                    const grantsSnapshot = await db.collection(`/artifacts/${appId}/public/data/grants`).get();
+                    // Map user IDs to their total grants
                     const userGrantTotals = {};
                     grantsSnapshot.forEach(doc => {
                         const grant = doc.data();
-                        if (userGrantTotals[grant.userId]) {
-                            userGrantTotals[grant.userId] += grant.amount;
-                        } else {
-                            userGrantTotals[grant.userId] = grant.amount;
-                        }
+                        userGrantTotals[grant.userId] = (userGrantTotals[grant.userId] || 0) + (grant.amount || 0);
                     });
-                    
+
                     if (projects.length === 0) {
                         tableBody.innerHTML = '<tr><td colspan="5" class="text-center py-4">No projects found.</td></tr>';
                         return;
@@ -1017,7 +1016,8 @@
                     projects.forEach(project => {
                         const row = document.createElement('tr');
                         row.className = 'border-b border-gray-200 hover:bg-gray-100';
-                        const principalInvestigatorEmail = userEmailMap[project.userId] || 'Email not available';
+
+                        const principalInvestigatorEmail = userDetailsMap[project.userId]?.email || 'Email not available';
                         const grantAmount = userGrantTotals[project.userId] ? `$${userGrantTotals[project.userId].toLocaleString()}` : 'N/A';
 
                         row.innerHTML = `
@@ -1034,6 +1034,7 @@
                     tableBody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-red-500">Failed to load report.</td></tr>';
                 }
             }
+
 
             function setupNavigation() {
                 document.getElementById('dashboard-btn').addEventListener('click', renderDashboard);
