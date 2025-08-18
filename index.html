@@ -309,6 +309,14 @@
                                 </select>
                             </div>
                             <div>
+                                <label for="project-grant" class="block text-sm font-medium text-gray-700">Associated Grant (Optional)</label>
+                                <input type="text" id="project-grant" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                            </div>
+                            <div>
+                                <label for="project-pi" class="block text-sm font-medium text-gray-700">Principal Investigator (Name or Email)</label>
+                                <input type="text" id="project-pi" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" required>
+                            </div>
+                            <div>
                                 <label for="project-description" class="block text-sm font-medium text-gray-700">Description</label>
                                 <textarea id="project-description" rows="3" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></textarea>
                             </div>
@@ -334,6 +342,8 @@
                         const data = {
                             name: document.getElementById('project-name').value,
                             status: document.getElementById('project-status').value,
+                            grant: document.getElementById('project-grant').value,
+                            principalInvestigator: document.getElementById('project-pi').value,
                             description: document.getElementById('project-description').value,
                             createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                             userId: userId,
