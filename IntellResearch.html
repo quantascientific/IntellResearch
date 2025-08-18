@@ -776,6 +776,7 @@
                 document.getElementById('mou-btn').addEventListener('click', renderMouPage);
                 document.getElementById('mobility-btn').addEventListener('click', renderMobilityPage);
                 document.getElementById('users-btn').addEventListener('click', renderUsersPage);
+                document.getElementById('reports-btn').addEventListener('click', renderReportsPage);
                 document.getElementById('logout-btn').addEventListener('click', async () => {
                     await auth.signOut();
                     showMessage('Logged out successfully.');
@@ -1022,6 +1023,248 @@
                 document.getElementById('mou-btn').addEventListener('click', renderMouPage);
                 document.getElementById('mobility-btn').addEventListener('click', renderMobilityPage);
                 document.getElementById('users-btn').addEventListener('click', renderUsersPage);
+                document.getElementById('reports-btn').addEventListener('click', renderReportsPage);
+                document.getElementById('logout-btn').addEventListener('click', async () => {
+                    await auth.signOut();
+                    showMessage('Logged out successfully.');
+                });
+            }
+            
+            async function renderUsersPage() {
+                clearPageContent();
+                if (userRole !== 'Admin') {
+                    pageContentDiv.innerHTML = `<p class="text-red-500 font-semibold text-lg">You do not have permission to view this page.</p>`;
+                    return;
+                }
+                
+                const userManagementHtml = `
+                    <h2 class="text-3xl font-semibold mb-6">User Management</h2>
+                    <div class="bg-white p-6 rounded-lg shadow-lg">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-xl font-semibold">User List</h3>
+                            <div class="relative w-64">
+                                <input type="text" id="search-user" placeholder="Search by email..." class="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 absolute top-1/2 left-3 transform -translate-y-1/2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                </svg>
+                            </div>
+                        </div>
+                        <div id="user-list" class="space-y-4">Loading users...</div>
+                    </div>
+                `;
+                pageContentDiv.innerHTML = userManagementHtml;
+                
+                listenForUsers();
+                document.getElementById('search-user').addEventListener('input', (e) => {
+                    const searchTerm = e.target.value.toLowerCase();
+                    const userItems = document.querySelectorAll('.user-item');
+                    userItems.forEach(item => {
+                        const email = item.querySelector('.user-email').textContent.toLowerCase();
+                        if (email.includes(searchTerm)) {
+                            item.style.display = 'flex';
+                        } else {
+                            item.style.display = 'none';
+                        }
+                    });
+                });
+            }
+
+            function listenForUsers() {
+                const q = db.collectionGroup('roles');
+                const unsubscribe = q.onSnapshot(querySnapshot => {
+                    const userListEl = document.getElementById('user-list');
+                    if (!userListEl) return;
+                    userListEl.innerHTML = '';
+                    if (querySnapshot.empty) {
+                        userListEl.innerHTML = '<p class="text-gray-500">No users found.</p>';
+                        return;
+                    }
+
+                    querySnapshot.forEach(doc => {
+                        const userData = doc.data();
+                        const userUid = doc.id;
+                        
+                        const userElement = document.createElement('div');
+                        userElement.className = 'user-item p-4 border border-gray-200 rounded-lg flex justify-between items-start cursor-pointer hover:bg-gray-100 transition-colors duration-200';
+                        userElement.dataset.uid = userUid;
+                        userElement.addEventListener('click', () => renderUserDetailPage(userUid));
+                        
+                        userElement.innerHTML = `
+                            <div>
+                                <h4 class="user-email text-lg font-medium">${userData.email || 'Email not available'}</h4>
+                                <p class="text-sm text-gray-600">Role: <span class="font-semibold">${userData.role}</span></p>
+                                <p class="text-xs text-gray-500 mt-1">UID: ${userUid}</p>
+                            </div>
+                        `;
+                        userListEl.appendChild(userElement);
+                    });
+
+                }, error => {
+                    console.error("Error listening for users:", error);
+                    showMessage("Failed to load users. Check console for details.", "error");
+                });
+                unsubscribeFunctions.push(unsubscribe);
+            }
+
+            async function renderUserDetailPage(uid) {
+                clearPageContent();
+                const userRoleDoc = await db.collection(`/artifacts/${appId}/users/${uid}/roles`).doc(uid).get();
+                if (!userRoleDoc.exists) {
+                    showMessage("User not found.", "error");
+                    return;
+                }
+                const userData = userRoleDoc.data();
+
+                const userDetailHtml = `
+                    <h2 class="text-3xl font-semibold mb-6">User Details</h2>
+                    <div class="bg-white p-6 rounded-lg shadow-lg space-y-4">
+                        <div>
+                            <p class="text-sm text-gray-500">Email</p>
+                            <p class="font-medium">${userData.email || 'Email not available'}</p>
+                        </div>
+                        <div>
+                            <p class="text-sm text-gray-500">UID</p>
+                            <p class="font-medium">${uid}</p>
+                        </div>
+                        <div>
+                            <p class="text-sm text-gray-500">Current Role</p>
+                            <p class="font-medium">${userData.role}</p>
+                        </div>
+                        <div class="border-t border-gray-200 pt-4">
+                            <h3 class="text-xl font-semibold mb-4">Update Role</h3>
+                            <form id="update-role-form" class="space-y-4">
+                                <div>
+                                    <label for="new-user-role-select" class="block text-sm font-medium text-gray-700">New Role</label>
+                                    <select id="new-user-role-select" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                                        <option value="Researcher">Researcher</option>
+                                        <option value="Staff">Staff</option>
+                                        <option value="Admin">Admin</option>
+                                    </select>
+                                </div>
+                                <button type="submit" class="py-2 px-4 bg-blue-600 text-white rounded-md shadow-sm">Update Role</button>
+                            </form>
+                        </div>
+                        <div class="border-t border-gray-200 pt-4 mt-4">
+                            <h3 class="text-xl font-semibold mb-4">Delete User</h3>
+                            <button id="delete-user-btn" data-uid="${uid}" class="py-2 px-4 bg-red-600 text-white rounded-md shadow-sm">Delete User</button>
+                            <p class="text-sm text-red-500 mt-2">This action cannot be undone.</p>
+                        </div>
+                    </div>
+                `;
+                pageContentDiv.innerHTML = userDetailHtml;
+
+                // Set the initial role in the select dropdown
+                document.getElementById('new-user-role-select').value = userData.role;
+
+                setupUpdateRoleListener(uid);
+                setupDeleteUserListener(uid);
+            }
+
+            function setupUpdateRoleListener(uid) {
+                const form = document.getElementById('update-role-form');
+                form.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const newRole = document.getElementById('new-user-role-select').value;
+                    try {
+                        const userRoleDocRef = db.collection(`/artifacts/${appId}/users/${uid}/roles`).doc(uid);
+                        await userRoleDocRef.update({ role: newRole });
+                        showMessage(`Successfully updated role for user to ${newRole}!`);
+                        renderUsersPage();
+                    } catch (error) {
+                        console.error("Error updating user role:", error);
+                        showMessage(`Failed to update user role. Check console for details.`, 'error');
+                    }
+                });
+            }
+
+            function setupDeleteUserListener(uid) {
+                const button = document.getElementById('delete-user-btn');
+                button.addEventListener('click', async () => {
+                    if (confirmModal(`Are you sure you want to delete this user?`)) {
+                        // In a real app, this would be a Firebase Cloud Function
+                        // as you cannot delete users directly from client-side code
+                        // for security reasons. This is a placeholder for now.
+                        showMessage(`Attempting to delete user with UID: ${uid}. This feature is disabled in the prototype for security.`, 'error');
+                    }
+                });
+            }
+            
+            async function renderReportsPage() {
+                clearPageContent();
+                if (userRole !== 'Admin') {
+                    pageContentDiv.innerHTML = `<p class="text-red-500 font-semibold text-lg">You do not have permission to view this page.</p>`;
+                    return;
+                }
+                
+                const reportsHtml = `
+                    <h2 class="text-3xl font-semibold mb-6">Detailed Reports</h2>
+                    <div class="bg-white p-6 rounded-lg shadow-lg">
+                        <h3 class="text-xl font-semibold mb-4">Projects Report</h3>
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full table-auto border-collapse">
+                                <thead class="bg-gray-200 text-gray-700">
+                                    <tr>
+                                        <th class="px-4 py-2 text-left">Project Name</th>
+                                        <th class="px-4 py-2 text-left">Status</th>
+                                        <th class="px-4 py-2 text-left">Description</th>
+                                        <th class="px-4 py-2 text-left">Created By</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="projects-report-table-body" class="text-gray-600">
+                                    <!-- Rows will be populated dynamically -->
+                                    <tr><td colspan="4" class="text-center py-4">Loading projects...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                `;
+                pageContentDiv.innerHTML = reportsHtml;
+                
+                // Load data for the report table
+                if (isAuthReady) {
+                    loadProjectsReport();
+                }
+            }
+
+            async function loadProjectsReport() {
+                const tableBody = document.getElementById('projects-report-table-body');
+                tableBody.innerHTML = '<tr><td colspan="4" class="text-center py-4">Loading projects...</td></tr>';
+                try {
+                    const projectsRef = db.collection(`/artifacts/${appId}/public/data/projects`);
+                    const snapshot = await projectsRef.get();
+                    
+                    if (snapshot.empty) {
+                        tableBody.innerHTML = '<tr><td colspan="4" class="text-center py-4">No projects found.</td></tr>';
+                        return;
+                    }
+
+                    tableBody.innerHTML = '';
+                    snapshot.forEach(doc => {
+                        const project = doc.data();
+                        const row = document.createElement('tr');
+                        row.className = 'border-b border-gray-200 hover:bg-gray-100';
+                        row.innerHTML = `
+                            <td class="px-4 py-2">${project.name}</td>
+                            <td class="px-4 py-2">${project.status}</td>
+                            <td class="px-4 py-2">${project.description || 'N/A'}</td>
+                            <td class="px-4 py-2">${project.userId ? project.userId.substring(0, 8) + '...' : 'Unknown'}</td>
+                        `;
+                        tableBody.appendChild(row);
+                    });
+                } catch (error) {
+                    console.error("Error loading projects report:", error);
+                    tableBody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-red-500">Failed to load report.</td></tr>';
+                }
+            }
+
+            function setupNavigation() {
+                document.getElementById('dashboard-btn').addEventListener('click', renderDashboard);
+                document.getElementById('projects-btn').addEventListener('click', renderProjectsPage);
+                document.getElementById('grants-btn').addEventListener('click', renderGrantsPage);
+                document.getElementById('mou-btn').addEventListener('click', renderMouPage);
+                document.getElementById('mobility-btn').addEventListener('click', renderMobilityPage);
+                document.getElementById('users-btn').addEventListener('click', renderUsersPage);
+                document.getElementById('reports-btn').addEventListener('click', renderReportsPage);
                 document.getElementById('logout-btn').addEventListener('click', async () => {
                     await auth.signOut();
                     showMessage('Logged out successfully.');
