@@ -970,7 +970,7 @@
                                         <th class="px-4 py-2 text-left">Project Name</th>
                                         <th class="px-4 py-2 text-left">Status</th>
                                         <th class="px-4 py-2 text-left">Description</th>
-                                        <th class="px-4 py-2 text-left">Grant Amount</th>
+                                        <th class="px-4 py-2 text-left">Associated Grant</th>
                                         <th class="px-4 py-2 text-left">Principal Investigator</th>
                                     </tr>
                                 </thead>
@@ -996,7 +996,6 @@
                 try {
                     const projectsRef = db.collection(`/artifacts/${appId}/public/data/projects`);
                     const projectsSnapshot = await projectsRef.get();
-                    
                     const projects = projectsSnapshot.docs.map(doc => doc.data());
                     
                     if (projects.length === 0) {
@@ -1006,7 +1005,6 @@
 
                     tableBody.innerHTML = '';
                     for (const project of projects) {
-                        // Find the grant amount
                         let grantAmount = 'N/A';
                         if (project.grant) {
                             const grantRef = db.collection(`/artifacts/${appId}/public/data/grants`).where('name', '==', project.grant);
@@ -1023,7 +1021,7 @@
                             <td class="px-4 py-2">${project.name}</td>
                             <td class="px-4 py-2">${project.status}</td>
                             <td class="px-4 py-2">${project.description || 'N/A'}</td>
-                            <td class="px-4 py-2">${grantAmount}</td>
+                            <td class="px-4 py-2">${project.grant || 'N/A'}</td>
                             <td class="px-4 py-2">${project.principalInvestigator || 'N/A'}</td>
                         `;
                         tableBody.appendChild(row);
