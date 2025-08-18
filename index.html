@@ -784,15 +784,59 @@
                     pageContentDiv.innerHTML = `<p class="text-red-500 font-semibold text-lg">You do not have permission to view this page.</p>`;
                     return;
                 }
-                pageContentDiv.innerHTML = `
+                
+                const userManagementHtml = `
                     <h2 class="text-3xl font-semibold mb-6">User Management</h2>
+                    <div class="mb-6 bg-white p-6 rounded-lg shadow-lg">
+                        <h3 class="text-xl font-semibold mb-4">Create New User</h3>
+                        <form id="create-user-form" class="space-y-4">
+                            <div>
+                                <label for="new-user-email" class="block text-sm font-medium text-gray-700">Email</label>
+                                <input type="email" id="new-user-email" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" required>
+                            </div>
+                            <div>
+                                <label for="new-user-password" class="block text-sm font-medium text-gray-700">Password</label>
+                                <input type="password" id="new-user-password" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" required>
+                            </div>
+                            <div>
+                                <label for="new-user-role" class="block text-sm font-medium text-gray-700">Role</label>
+                                <select id="new-user-role" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                                    <option value="Researcher">Researcher</option>
+                                    <option value="Staff">Staff</option>
+                                    <option value="Admin">Admin</option>
+                                </select>
+                            </div>
+                            <button type="submit" class="py-2 px-4 bg-blue-600 text-white rounded-md shadow-sm">Create User</button>
+                        </form>
+                    </div>
                     <div class="bg-white p-6 rounded-lg shadow-lg">
                         <h3 class="text-xl font-semibold mb-4">User List</h3>
                         <div id="user-list" class="space-y-4">Loading users...</div>
                     </div>
                 `;
+                pageContentDiv.innerHTML = userManagementHtml;
+                
+                setupCreateUserListener();
                 listenForUsers();
             }
+            
+            function setupCreateUserListener() {
+                const form = document.getElementById('create-user-form');
+                if (form) {
+                    form.addEventListener('submit', async (e) => {
+                        e.preventDefault();
+                        const email = document.getElementById('new-user-email').value;
+                        const password = document.getElementById('new-user-password').value;
+                        const role = document.getElementById('new-user-role').value;
+
+                        // This is a placeholder for a secure user creation function.
+                        // In a real app, you would use a Firebase Cloud Function to create users.
+                        showMessage(`This is a prototype. User creation via this form is disabled for security reasons. Please register from the login page instead.`, 'error');
+                        form.reset();
+                    });
+                }
+            }
+
 
             function listenForUsers() {
                 const q = db.collectionGroup('roles');
@@ -960,7 +1004,10 @@
                             userRole = docSnap.data().role;
                             updateNav(true, userRole);
                             isAuthReady = true;
-                            renderDashboard();
+                            // Check if a page has been rendered already
+                            if (!pageContentDiv.innerHTML.trim()) {
+                                renderDashboard();
+                            }
                         } else {
                             // If role document doesn't exist, assume a default role or log out
                             console.warn("User role not found. Logging out.");
