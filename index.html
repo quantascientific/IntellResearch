@@ -171,7 +171,11 @@
                         const role = document.getElementById('role').value;
                         try {
                             const userCredential = await auth.createUserWithEmailAndPassword(email, password);
-                            await db.collection(`/artifacts/${appId}/users/${userCredential.user.uid}/roles`).doc(userCredential.user.uid).set({ role: role });
+                            // Store the user's email along with the role in Firestore
+                            await db.collection(`/artifacts/${appId}/users/${userCredential.user.uid}/roles`).doc(userCredential.user.uid).set({ 
+                                role: role,
+                                email: email
+                            });
                             showMessage('Registration successful! You can now log in.');
                         } catch (error) {
                             console.error('Registration error:', error);
@@ -790,203 +794,6 @@
                         <h3 class="text-xl font-semibold mb-4">Manage User Roles</h3>
                         <form id="manage-role-form" class="space-y-4">
                             <div>
-                                <label for="target-user-uid" class="block text-sm font-medium text-gray-700">User UID</label>
-                                <input type="text" id="target-user-uid" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" required>
-                            </div>
-                            <div>
-                                <label for="new-user-role" class="block text-sm font-medium text-gray-700">New Role</label>
-                                <select id="new-user-role" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
-                                    <option value="Researcher">Researcher</option>
-                                    <option value="Staff">Staff</option>
-                                    <option value="Admin">Admin</option>
-                                </select>
-                            </div>
-                            <button type="submit" class="py-2 px-4 bg-blue-600 text-white rounded-md shadow-sm">Update Role</button>
-                        </form>
-                    </div>
-                    <div class="bg-white p-6 rounded-lg shadow-lg">
-                        <h3 class="text-xl font-semibold mb-4">User List</h3>
-                        <div id="user-list" class="space-y-4">Loading users...</div>
-                    </div>
-                `;
-                pageContentDiv.innerHTML = userManagementHtml;
-                
-                setupManageRoleListener();
-                listenForUsers();
-            }
-
-            function setupManageRoleListener() {
-                const form = document.getElementById('manage-role-form');
-                if (form) {
-                    form.addEventListener('submit', async (e) => {
-                        e.preventDefault();
-                        const targetUid = document.getElementById('target-user-uid').value;
-                        const newRole = document.getElementById('new-user-role').value;
-                        
-                        try {
-                            const userRoleDocRef = db.collection(`/artifacts/${appId}/users/${targetUid}/roles`).doc(targetUid);
-                            await userRoleDocRef.set({ role: newRole });
-                            showMessage(`Successfully updated role for user ${targetUid} to ${newRole}!`);
-                        } catch (error) {
-                            console.error("Error updating user role:", error);
-                            showMessage(`Failed to update user role. Check console for details.`, 'error');
-                        }
-                    });
-                }
-            }
-            
-            function listenForUsers() {
-                const q = db.collectionGroup('roles');
-                const unsubscribe = q.onSnapshot(querySnapshot => {
-                    const userListEl = document.getElementById('user-list');
-                    if (!userListEl) return;
-                    userListEl.innerHTML = '';
-                    if (querySnapshot.empty) {
-                        userListEl.innerHTML = '<p class="text-gray-500">No users found.</p>';
-                        return;
-                    }
-
-                    querySnapshot.forEach(async doc => {
-                        const userData = doc.data();
-                        const userUid = doc.id;
-                        const userElement = document.createElement('div');
-                        userElement.className = 'p-4 border border-gray-200 rounded-lg flex justify-between items-start';
-                        userElement.innerHTML = `
-                            <div>
-                                <h4 class="text-lg font-medium">${userUid}</h4>
-                                <p class="text-sm text-gray-600">Role: <span class="font-semibold">${userData.role}</span></p>
-                            </div>
-                            <div>
-                                <button data-uid="${userUid}" class="delete-user-btn text-red-500 hover:text-red-700 text-sm">Delete</button>
-                            </div>
-                        `;
-                        userListEl.appendChild(userElement);
-                    });
-
-                    attachUserDeleteListeners();
-                }, error => {
-                    console.error("Error listening for users:", error);
-                    showMessage("Failed to load users. Check console for details.", "error");
-                });
-                unsubscribeFunctions.push(unsubscribe);
-            }
-
-            function attachUserDeleteListeners() {
-                const userListEl = document.getElementById('user-list');
-                if (!userListEl) return;
-                userListEl.querySelectorAll('.delete-user-btn').forEach(btn => {
-                    btn.addEventListener('click', async () => {
-                        const userUid = btn.dataset.uid;
-                        if (confirmModal(`Are you sure you want to delete this user?`)) {
-                            // In a real app, this would be a Firebase Cloud Function
-                            // as you cannot delete users directly from client-side code
-                            // for security reasons. This is a placeholder for now.
-                            showMessage(`Attempting to delete user with UID: ${userUid}. This feature is disabled in the prototype for security.`, 'error');
-                        }
-                    });
-                });
-            }
-
-
-            // --- General Listeners and Helpers ---
-            function attachCrudListeners(collectionName) {
-                const pageElement = document.getElementById('page-content');
-                pageElement.querySelectorAll(`.delete-${collectionName}-btn`).forEach(btn => {
-                    btn.addEventListener('click', async () => {
-                        const id = btn.dataset.id;
-                        if (confirmModal(`Are you sure you want to delete this ${collectionName}?`)) {
-                            try {
-                                await db.collection(`/artifacts/${appId}/public/data/${collectionName}s`).doc(id).delete();
-                                await addAuditLog(`${collectionName} deleted`);
-                                showMessage(`${collectionName} deleted successfully!`);
-                            } catch (error) {
-                                console.error(`Error deleting ${collectionName}:`, error);
-                                showMessage(`Failed to delete ${collectionName}.`, 'error');
-                            }
-                        }
-                    });
-                });
-            }
-
-            // Custom modal for confirmation instead of alert/confirm
-            function confirmModal(message) {
-                const modal = document.createElement('div');
-                modal.className = 'fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex justify-center items-center z-50';
-                modal.innerHTML = `
-                    <div class="relative mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-                        <div class="mt-3 text-center">
-                            <h3 class="text-lg leading-6 font-medium text-gray-900">${message}</h3>
-                            <div class="mt-2 px-7 py-3">
-                                <p class="text-sm text-gray-500">This action cannot be undone.</p>
-                            </div>
-                            <div class="items-center px-4 py-3">
-                                <button id="modal-confirm-btn" class="px-4 py-2 bg-red-500 text-white text-base font-medium rounded-md w-24 shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500">
-                                    Delete
-                                </button>
-                                <button id="modal-cancel-btn" class="px-4 py-2 bg-gray-200 text-gray-800 text-base font-medium rounded-md w-24 shadow-sm hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500 ml-2">
-                                    Cancel
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                `;
-                document.body.appendChild(modal);
-                return new Promise(resolve => {
-                    document.getElementById('modal-confirm-btn').addEventListener('click', () => {
-                        modal.remove();
-                        resolve(true);
-                    });
-                    document.getElementById('modal-cancel-btn').addEventListener('click', () => {
-                        modal.remove();
-                        resolve(false);
-                    });
-                });
-            }
-
-            function unsubscribeListeners() {
-                unsubscribeFunctions.forEach(unsub => unsub());
-                unsubscribeFunctions = [];
-            }
-
-            async function addAuditLog(action) {
-                if (!isAuthReady) return;
-                try {
-                    await db.collection(`/artifacts/${appId}/public/data/auditLogs`).add({
-                        action: action,
-                        userId: userId,
-                        timestamp: firebase.firestore.FieldValue.serverTimestamp()
-                    });
-                } catch (error) {
-                    console.error("Error adding audit log:", error);
-                }
-            }
-
-            function setupNavigation() {
-                document.getElementById('dashboard-btn').addEventListener('click', renderDashboard);
-                document.getElementById('projects-btn').addEventListener('click', renderProjectsPage);
-                document.getElementById('grants-btn').addEventListener('click', renderGrantsPage);
-                document.getElementById('mou-btn').addEventListener('click', renderMouPage);
-                document.getElementById('mobility-btn').addEventListener('click', renderMobilityPage);
-                document.getElementById('users-btn').addEventListener('click', renderUsersPage);
-                document.getElementById('logout-btn').addEventListener('click', async () => {
-                    await auth.signOut();
-                    showMessage('Logged out successfully.');
-                });
-            }
-            
-            async function renderUsersPage() {
-                clearPageContent();
-                if (userRole !== 'Admin') {
-                    pageContentDiv.innerHTML = `<p class="text-red-500 font-semibold text-lg">You do not have permission to view this page.</p>`;
-                    return;
-                }
-                
-                const userManagementHtml = `
-                    <h2 class="text-3xl font-semibold mb-6">User Management</h2>
-                    <div class="bg-white p-6 rounded-lg shadow-lg">
-                        <h3 class="text-xl font-semibold mb-4">Manage User Roles</h3>
-                        <form id="manage-role-form" class="space-y-4">
-                            <div>
                                 <label for="target-user-email" class="block text-sm font-medium text-gray-700">User Email</label>
                                 <input type="email" id="target-user-email" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" required>
                             </div>
@@ -1051,7 +858,7 @@
                         userElement.className = 'p-4 border border-gray-200 rounded-lg flex justify-between items-start';
                         userElement.innerHTML = `
                             <div>
-                                <h4 class="text-lg font-medium">Email not available</h4>
+                                <h4 class="text-lg font-medium">${userData.email || 'Email not available'}</h4>
                                 <p class="text-sm text-gray-600">Role: <span class="font-semibold">${userData.role}</span></p>
                                 <p class="text-xs text-gray-500 mt-1">UID: ${userUid}</p>
                             </div>
