@@ -960,12 +960,13 @@
                                         <th class="px-4 py-2 text-left">Project Name</th>
                                         <th class="px-4 py-2 text-left">Status</th>
                                         <th class="px-4 py-2 text-left">Description</th>
-                                        <th class="px-4 py-2 text-left">Created By</th>
+                                        <th class="px-4 py-2 text-left">Grant Amount</th>
+                                        <th class="px-4 py-2 text-left">Principal Investigator</th>
                                     </tr>
                                 </thead>
                                 <tbody id="projects-report-table-body" class="text-gray-600">
                                     <!-- Rows will be populated dynamically -->
-                                    <tr><td colspan="4" class="text-center py-4">Loading projects...</td></tr>
+                                    <tr><td colspan="5" class="text-center py-4">Loading reports...</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -981,32 +982,56 @@
 
             async function loadProjectsReport() {
                 const tableBody = document.getElementById('projects-report-table-body');
-                tableBody.innerHTML = '<tr><td colspan="4" class="text-center py-4">Loading projects...</td></tr>';
+                tableBody.innerHTML = '<tr><td colspan="5" class="text-center py-4">Loading reports...</td></tr>';
                 try {
-                    const projectsRef = db.collection(`/artifacts/${appId}/public/data/projects`);
-                    const snapshot = await projectsRef.get();
+                    // Fetch all projects
+                    const projectsSnapshot = await db.collection(`/artifacts/${appId}/public/data/projects`).get();
+                    const projects = projectsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+                    // Fetch all roles to map user IDs to emails
+                    const rolesSnapshot = await db.collectionGroup('roles').get();
+                    const userEmailMap = {};
+                    rolesSnapshot.forEach(doc => {
+                        const userData = doc.data();
+                        userEmailMap[doc.id] = userData.email || 'Email not available';
+                    });
+
+                    // Fetch all grants and calculate total per user
+                    const grantsSnapshot = await db.collection(`/artifacts/${appId}/public/data/grants`).get();
+                    const userGrantTotals = {};
+                    grantsSnapshot.forEach(doc => {
+                        const grant = doc.data();
+                        if (userGrantTotals[grant.userId]) {
+                            userGrantTotals[grant.userId] += grant.amount;
+                        } else {
+                            userGrantTotals[grant.userId] = grant.amount;
+                        }
+                    });
                     
-                    if (snapshot.empty) {
-                        tableBody.innerHTML = '<tr><td colspan="4" class="text-center py-4">No projects found.</td></tr>';
+                    if (projects.length === 0) {
+                        tableBody.innerHTML = '<tr><td colspan="5" class="text-center py-4">No projects found.</td></tr>';
                         return;
                     }
 
                     tableBody.innerHTML = '';
-                    snapshot.forEach(doc => {
-                        const project = doc.data();
+                    projects.forEach(project => {
                         const row = document.createElement('tr');
                         row.className = 'border-b border-gray-200 hover:bg-gray-100';
+                        const principalInvestigatorEmail = userEmailMap[project.userId] || 'Email not available';
+                        const grantAmount = userGrantTotals[project.userId] ? `$${userGrantTotals[project.userId].toLocaleString()}` : 'N/A';
+
                         row.innerHTML = `
                             <td class="px-4 py-2">${project.name}</td>
                             <td class="px-4 py-2">${project.status}</td>
                             <td class="px-4 py-2">${project.description || 'N/A'}</td>
-                            <td class="px-4 py-2">${project.userId ? project.userId.substring(0, 8) + '...' : 'Unknown'}</td>
+                            <td class="px-4 py-2">${grantAmount}</td>
+                            <td class="px-4 py-2">${principalInvestigatorEmail}</td>
                         `;
                         tableBody.appendChild(row);
                     });
                 } catch (error) {
                     console.error("Error loading projects report:", error);
-                    tableBody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-red-500">Failed to load report.</td></tr>';
+                    tableBody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-red-500">Failed to load report.</td></tr>';
                 }
             }
 
