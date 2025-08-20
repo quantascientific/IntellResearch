@@ -45,7 +45,6 @@
         </main>
         
         <script>
-            // Initialize Firebase with your project's configuration
             const firebaseConfig = {
               apiKey: "AIzaSyAsMnPa_cUvJd4NZPlTYP_7UXlguFlNXwM",
               authDomain: "intellresearch.firebaseapp.com",
@@ -64,6 +63,7 @@
             let userId = null;
             let userRole = null;
             let userPlan = null;
+            let userGroupId = null; // New field to store the user's organization/group ID
             let isAuthReady = false;
             let unsubscribeFunctions = [];
 
@@ -120,6 +120,10 @@
                                     <option value="Admin">Admin</option>
                                 </select>
                             </div>
+                            <div>
+                                <label for="groupId" class="block text-sm font-medium text-gray-700">Group/School/Organization ID</label>
+                                <input type="text" id="groupId" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" required>
+                            </div>
                             <button type="submit" id="login-btn" class="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
                                 Login
                             </button>
@@ -156,12 +160,14 @@
                         const email = document.getElementById('email').value;
                         const password = document.getElementById('password').value;
                         const role = document.getElementById('role').value;
+                        const groupId = document.getElementById('groupId').value; // Get the Group ID
                         try {
                             const userCredential = await auth.createUserWithEmailAndPassword(email, password);
                             await db.collection(`/artifacts/${appId}/users/${userCredential.user.uid}/roles`).doc(userCredential.user.uid).set({
                                 role: role,
                                 email: email,
-                                plan: 'Free'
+                                plan: 'Free',
+                                groupId: groupId, // Save the Group ID
                             });
                             showMessage('Registration successful! Redirecting to plan selection...', 'info');
                             renderSubscribePage(userCredential.user.uid);
@@ -335,6 +341,24 @@
                 chartElement.parentNode.appendChild(legend);
             }
 
+            // Central function to get the correct query based on user's role and group
+            function getFilteredQuery(collectionName) {
+                const collectionRef = db.collection(`/artifacts/${appId}/public/data/${collectionName}s`);
+                
+                if (userRole === 'Admin') {
+                    return collectionRef;
+                } else if (userRole === 'Staff') {
+                    // Staff can only see items from their group
+                    return collectionRef.where('groupId', '==', userGroupId);
+                } else if (userRole === 'Researcher') {
+                    // Researchers can only see items they created
+                    return collectionRef.where('userId', '==', userId);
+                } else {
+                    return collectionRef.limit(0); // Return an empty query for other roles
+                }
+            }
+            
+            // --- Projects Page ---
             function renderProjectsPage() {
                 clearPageContent();
                 unsubscribeListeners();
@@ -396,6 +420,7 @@
                             description: document.getElementById('project-description').value,
                             createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                             userId: userId,
+                            groupId: userGroupId, // Save the user's Group ID
                             appId: appId
                         };
                         try {
@@ -412,7 +437,7 @@
             }
             
             function listenForProjects() {
-                const q = db.collection(`/artifacts/${appId}/public/data/projects`);
+                const q = getFilteredQuery('project'); // Use the new function to get the query
                 const unsubscribe = q.onSnapshot((querySnapshot) => {
                     const projectList = document.getElementById('project-list');
                     if (!projectList) return;
@@ -446,6 +471,7 @@
                 unsubscribeFunctions.push(unsubscribe);
             }
             
+            // --- Grants Page ---
             function renderGrantsPage() {
                 clearPageContent();
                 unsubscribeListeners();
@@ -509,6 +535,7 @@
                             status: document.getElementById('grant-status').value,
                             createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                             userId: userId,
+                            groupId: userGroupId, // Save the user's Group ID
                             appId: appId
                         };
                         try {
@@ -529,9 +556,8 @@
                     });
                 }
             }
-
             function listenForGrants() {
-                const q = db.collection(`/artifacts/${appId}/public/data/grants`);
+                const q = getFilteredQuery('grant'); // Use the new function to get the query
                 const unsubscribe = q.onSnapshot((querySnapshot) => {
                     const grantList = document.getElementById('grant-list');
                     if (!grantList) return;
@@ -564,7 +590,8 @@
                 });
                 unsubscribeFunctions.push(unsubscribe);
             }
-
+            
+            // --- MOU Page ---
             function renderMouPage() {
                 clearPageContent();
                 unsubscribeListeners();
@@ -615,6 +642,7 @@
                             status: document.getElementById('mou-status').value,
                             createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                             userId: userId,
+                            groupId: userGroupId, // Save the user's Group ID
                             appId: appId
                         };
                         try {
@@ -631,7 +659,7 @@
             }
 
             function listenForMous() {
-                const q = db.collection(`/artifacts/${appId}/public/data/mous`);
+                const q = getFilteredQuery('mou'); // Use the new function to get the query
                 const unsubscribe = q.onSnapshot((querySnapshot) => {
                     const mouList = document.getElementById('mou-list');
                     if (!mouList) return;
@@ -664,6 +692,7 @@
                 unsubscribeFunctions.push(unsubscribe);
             }
 
+            // --- Mobility Page ---
             function renderMobilityPage() {
                 clearPageContent();
                 unsubscribeListeners();
@@ -718,6 +747,7 @@
                             date: document.getElementById('mobility-date').value,
                             createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                             userId: userId,
+                            groupId: userGroupId, // Save the user's Group ID
                             appId: appId
                         };
                         try {
@@ -734,7 +764,7 @@
             }
             
             function listenForMobility() {
-                const q = db.collection(`/artifacts/${appId}/public/data/mobility`);
+                const q = getFilteredQuery('mobility'); // Use the new function to get the query
                 const unsubscribe = q.onSnapshot((querySnapshot) => {
                     const mobilityList = document.getElementById('mobility-list');
                     if (!mobilityList) return;
@@ -1010,7 +1040,7 @@
                 const tableBody = document.getElementById('projects-report-table-body');
                 tableBody.innerHTML = '<tr><td colspan="5" class="text-center py-4">Loading reports...</td></tr>';
                 try {
-                    const projectsRef = db.collection(`/artifacts/${appId}/public/data/projects`);
+                    const projectsRef = getFilteredQuery('project'); // Use the new function to get the query
                     const projectsSnapshot = await projectsRef.get();
                     const projects = projectsSnapshot.docs.map(doc => doc.data());
                     if (projects.length === 0) { tableBody.innerHTML = '<tr><td colspan="5" class="text-center py-4">No projects found.</td></tr>'; return; }
@@ -1062,6 +1092,7 @@
                         if (docSnap.exists) {
                             userRole = docSnap.data().role;
                             userPlan = docSnap.data().plan;
+                            userGroupId = docSnap.data().groupId; // Retrieve the user's Group ID
                             updateNav(true, userRole, userPlan);
                             isAuthReady = true;
                             if (docSnap.data().plan === 'Free') {
@@ -1081,6 +1112,7 @@
                     userId = null;
                     userRole = null;
                     userPlan = null;
+                    userGroupId = null;
                     updateNav(false);
                     renderLoginPage();
                 }
