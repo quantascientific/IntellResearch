@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>IntellResearch</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-storage-compat.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
         body {
@@ -13,10 +17,6 @@
             color: #1f2937;
         }
     </style>
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-storage-compat.js"></script>
 </head>
 <body>
     <div id="app" class="min-h-screen flex flex-col">
@@ -33,6 +33,7 @@
                 <button id="mobility-btn" class="text-blue-600 hover:text-blue-800 font-semibold hidden">Mobility</button>
                 <button id="users-btn" class="text-blue-600 hover:text-blue-800 font-semibold hidden">Users</button>
                 <button id="reports-btn" class="text-blue-600 hover:text-blue-800 font-semibold hidden">Reports</button>
+                <button id="upgrade-btn" class="py-1 px-3 bg-green-500 text-white font-semibold rounded-md hidden">Upgrade</button>
                 <span id="user-info-text" class="text-gray-600 font-semibold hidden"></span>
                 <button id="logout-btn" class="text-red-600 hover:text-red-800 font-semibold hidden">Logout</button>
             </nav>
@@ -54,11 +55,7 @@
               appId: "1:795386655637:web:d969900a5897063949fc9c",
               measurementId: "G-TD95MWR2RN"
             };
-
-            // This app ID is used for Firestore collection paths, it's not the same as Firebase's app ID.
             const appId = "intellresearch";
-
-            // Use compatibility imports to support older syntax
             const app = firebase.initializeApp(firebaseConfig);
             const auth = app.auth();
             const db = app.firestore();
@@ -66,13 +63,13 @@
 
             let userId = null;
             let userRole = null;
+            let userPlan = null;
             let isAuthReady = false;
             let unsubscribeFunctions = [];
 
             const pageContentDiv = document.getElementById('page-content');
             const navContainer = document.getElementById('nav-container');
 
-            // --- UI and Navigation Functions ---
             function showMessage(message, type = 'info') {
                 const messageBox = document.createElement('div');
                 messageBox.className = `p-4 rounded-lg mb-4 text-center ${type === 'error' ? 'bg-red-200 text-red-800' : 'bg-green-200 text-green-800'}`;
@@ -80,32 +77,27 @@
                 pageContentDiv.prepend(messageBox);
                 setTimeout(() => messageBox.remove(), 5000);
             }
+            function clearPageContent() { pageContentDiv.innerHTML = ''; }
 
-            function clearPageContent() {
-                pageContentDiv.innerHTML = '';
-            }
-
-            function updateNav(isLoggedIn, role = null) {
-                const navButtons = ['dashboard-btn', 'projects-btn', 'grants-btn', 'mou-btn', 'mobility-btn'];
+            function updateNav(isLoggedIn, role = null, plan = null) {
+                const navButtons = ['dashboard-btn', 'projects-btn', 'grants-btn'];
                 const roleBasedItems = {
-                    'Admin': [...navButtons, 'users-btn', 'reports-btn'],
-                    'Staff': navButtons,
-                    'Researcher': ['dashboard-btn', 'projects-btn', 'grants-btn'],
+                    'Admin': [...navButtons, 'users-btn', 'reports-btn', 'mou-btn', 'mobility-btn'],
+                    'Staff': [...navButtons, 'mou-btn', 'mobility-btn'],
+                    'Researcher': navButtons,
                 };
-
-                // Hide all navigation buttons by default
                 document.querySelectorAll('#nav-container button').forEach(btn => btn.classList.add('hidden'));
                 document.getElementById('logout-btn').classList.toggle('hidden', !isLoggedIn);
                 document.getElementById('user-info-text').classList.toggle('hidden', !isLoggedIn);
+                document.getElementById('upgrade-btn').classList.toggle('hidden', !isLoggedIn || plan !== 'Free');
                 
                 if (isLoggedIn && role) {
                     const visibleItems = roleBasedItems[role] || [];
                     visibleItems.forEach(btnId => document.getElementById(btnId).classList.remove('hidden'));
-                    document.getElementById('user-info-text').textContent = `User: ${userId ? userId.substring(0, 8) + '...' : ''} (${role})`;
+                    document.getElementById('user-info-text').textContent = `User: ${userId ? userId.substring(0, 8) + '...' : ''} (${role}) | Plan: ${plan || 'Free'}`;
                 }
             }
 
-            // --- Views (Page Rendering) ---
             function renderLoginPage() {
                 clearPageContent();
                 const loginHtml = `
@@ -166,12 +158,13 @@
                         const role = document.getElementById('role').value;
                         try {
                             const userCredential = await auth.createUserWithEmailAndPassword(email, password);
-                            // Store the user's email along with the role in Firestore
                             await db.collection(`/artifacts/${appId}/users/${userCredential.user.uid}/roles`).doc(userCredential.user.uid).set({
                                 role: role,
-                                email: email
+                                email: email,
+                                plan: 'Free'
                             });
-                            showMessage('Registration successful! You can now log in.');
+                            showMessage('Registration successful! Redirecting to plan selection...', 'info');
+                            renderSubscribePage(userCredential.user.uid);
                         } catch (error) {
                             console.error('Registration error:', error);
                             showMessage('Registration failed. Please try again with a different email.', 'error');
@@ -180,11 +173,91 @@
                 }
             }
             
+            async function renderSubscribePage(uid) {
+                clearPageContent();
+                const subscribeHtml = `
+                    <div class="max-w-4xl mx-auto p-8 rounded-lg shadow-lg bg-white">
+                        <h2 class="text-3xl font-bold text-center mb-8">Choose Your Plan</h2>
+                        <p class="text-center text-gray-600 mb-8">You can start with the free plan and upgrade at any time.</p>
+                        <div id="pricing-plans" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                            <div class="border p-6 rounded-lg shadow-md text-center">
+                                <h3 class="text-xl font-bold mb-2">Free</h3>
+                                <p class="text-gray-500 mb-4">Students, Early-Career Researchers</p>
+                                <p class="text-3xl font-bold mb-4">Free</p>
+                                <ul class="text-left space-y-2 mb-6">
+                                    <li class="flex items-center"><svg class="w-5 h-5 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>Basic reference management</li>
+                                    <li class="flex items-center"><svg class="w-5 h-5 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>Limited storage (100 MB)</li>
+                                    <li class="flex items-center"><svg class="w-5 h-5 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>Basic collaboration (1-2)</li>
+                                </ul>
+                                <button data-plan="Free" class="w-full py-2 px-4 rounded-md text-blue-700 bg-blue-100 hover:bg-blue-200 font-semibold">Choose Plan</button>
+                            </div>
+                            <div class="border p-6 rounded-lg shadow-md text-center">
+                                <h3 class="text-xl font-bold mb-2">Individual Pro</h3>
+                                <p class="text-gray-500 mb-4">Active Researchers, Professors</p>
+                                <p class="text-3xl font-bold mb-4">$5<span class="text-sm font-normal text-gray-500">/mo</span></p>
+                                <ul class="text-left space-y-2 mb-6">
+                                    <li class="flex items-center"><svg class="w-5 h-5 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>Unlimited references</li>
+                                    <li class="flex items-center"><svg class="w-5 h-5 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>Increased storage (5 GB)</li>
+                                    <li class="flex items-center"><svg class="w-5 h-5 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>Advanced collaboration (5-10)</li>
+                                </ul>
+                                <button data-plan="Pro" class="w-full py-2 px-4 rounded-md text-white bg-blue-600 hover:bg-blue-700 font-semibold">Choose Plan</button>
+                            </div>
+                            <div class="border p-6 rounded-lg shadow-md text-center">
+                                <h3 class="text-xl font-bold mb-2">Research Group</h3>
+                                <p class="text-gray-500 mb-4">Research Labs, Small Departments</p>
+                                <p class="text-3xl font-bold mb-4">$4<span class="text-sm font-normal text-gray-500">/user/mo</span></p>
+                                <ul class="text-left space-y-2 mb-6">
+                                    <li class="flex items-center"><svg class="w-5 h-5 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>Everything in Pro</li>
+                                    <li class="flex items-center"><svg class="w-5 h-5 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>Group management tools</li>
+                                    <li class="flex items-center"><svg class="w-5 h-5 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>Shared storage & library</li>
+                                </ul>
+                                <button data-plan="Group" class="w-full py-2 px-4 rounded-md text-white bg-blue-600 hover:bg-blue-700 font-semibold">Choose Plan</button>
+                            </div>
+                             <div class="border p-6 rounded-lg shadow-md text-center">
+                                <h3 class="text-xl font-bold mb-2">Institutional</h3>
+                                <p class="text-gray-500 mb-4">Universities, Research Institutes</p>
+                                <p class="text-3xl font-bold mb-4">Custom</p>
+                                <ul class="text-left space-y-2 mb-6">
+                                    <li class="flex items-center"><svg class="w-5 h-5 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>Everything in Group</li>
+                                    <li class="flex items-center"><svg class="w-5 h-5 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>Centralized admin</li>
+                                    <li class="flex items-center"><svg class="w-5 h-5 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>SSO & API access</li>
+                                </ul>
+                                <button data-plan="Institutional" class="w-full py-2 px-4 rounded-md text-white bg-gray-600 hover:bg-gray-700 font-semibold">Contact Us</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                pageContentDiv.innerHTML = subscribeHtml;
+                setupSubscribeListeners(uid);
+            }
+
+            async function setupSubscribeListeners(uid) {
+                document.querySelectorAll('#pricing-plans button').forEach(button => {
+                    button.addEventListener('click', async (e) => {
+                        const plan = e.target.dataset.plan;
+                        try {
+                            await db.collection(`/artifacts/${appId}/users/${uid}/roles`).doc(uid).update({ plan: plan });
+                            if (plan === 'Free') {
+                                showMessage(`Plan successfully set to Free. Redirecting to dashboard...`, 'success');
+                                setTimeout(() => window.location.reload(), 1500);
+                            } else if (plan === 'Institutional') {
+                                showMessage("Thank you for your interest. Please contact our sales team.", 'info');
+                            } else {
+                                showMessage(`Plan set to ${plan}. This is a client-side prototype, so no payment is required. You can now use your new features.`, 'info');
+                                setTimeout(() => window.location.reload(), 1500);
+                            }
+                        } catch (error) {
+                            console.error('Error updating plan:', error);
+                            showMessage("Failed to update plan. Please try again.", 'error');
+                        }
+                    });
+                });
+            }
+
             async function renderDashboard() {
                 clearPageContent();
-                unsubscribeListeners(); // Unsubscribe old listeners
+                unsubscribeListeners();
                 pageContentDiv.innerHTML = `<h2 class="text-3xl font-semibold mb-6">Analytics & Reporting Dashboard</h2>`;
-
                 const reportsSection = document.createElement('div');
                 reportsSection.className = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6';
                 reportsSection.innerHTML = `
@@ -203,27 +276,17 @@
                 `;
                 pageContentDiv.appendChild(reportsSection);
 
-                // Load and display data for dashboard
                 if (isAuthReady) {
                     try {
                         const projectSnapshot = await db.collection(`/artifacts/${appId}/public/data/projects`).get();
                         const grantSnapshot = await db.collection(`/artifacts/${appId}/public/data/grants`).get();
                         const auditLogSnapshot = await db.collection(`/artifacts/${appId}/public/data/auditLogs`).orderBy('timestamp', 'desc').limit(5).get();
-
                         const projectStatus = {};
-                        projectSnapshot.forEach(doc => {
-                            const data = doc.data();
-                            projectStatus[data.status] = (projectStatus[data.status] || 0) + 1;
-                        });
+                        projectSnapshot.forEach(doc => { const data = doc.data(); projectStatus[data.status] = (projectStatus[data.status] || 0) + 1; });
                         renderSimpleChart('project-status-chart', projectStatus);
-
                         const grantStatus = {};
-                        grantSnapshot.forEach(doc => {
-                            const data = doc.data();
-                            grantStatus[data.status] = (grantStatus[data.status] || 0) + 1;
-                        });
+                        grantSnapshot.forEach(doc => { const data = doc.data(); grantStatus[data.status] = (grantStatus[data.status] || 0) + 1; });
                         renderSimpleChart('grant-status-chart', grantStatus);
-
                         const auditLogList = document.getElementById('audit-log-list');
                         auditLogList.innerHTML = '';
                         auditLogSnapshot.forEach(doc => {
@@ -233,29 +296,22 @@
                             logItem.textContent = `${new Date(data.timestamp.toDate()).toLocaleString()} - ${data.action} by User ${data.userId ? data.userId.substring(0, 8) + '...' : 'Unknown'}`;
                             auditLogList.appendChild(logItem);
                         });
-
                     } catch (error) {
                         console.error("Error fetching dashboard data:", error);
                         showMessage("Failed to load dashboard data. Please check permissions.", "error");
                     }
                 }
             }
-
+            
             function renderSimpleChart(elementId, data) {
                 const chartElement = document.getElementById(elementId);
                 chartElement.innerHTML = '';
                 const total = Object.values(data).reduce((sum, count) => sum + count, 0);
-                if (total === 0) {
-                    chartElement.textContent = 'No data available.';
-                    return;
-                }
-
+                if (total === 0) { chartElement.textContent = 'No data available.'; return; }
                 const colors = ['bg-blue-500', 'bg-green-500', 'bg-red-500', 'bg-yellow-500'];
                 let colorIndex = 0;
-
                 const barsContainer = document.createElement('div');
                 barsContainer.className = 'flex w-full h-full';
-
                 for (const key in data) {
                     const bar = document.createElement('div');
                     const percentage = (data[key] / total) * 100;
@@ -265,7 +321,6 @@
                     colorIndex++;
                 }
                 chartElement.appendChild(barsContainer);
-
                 const legend = document.createElement('div');
                 legend.className = 'mt-2 text-xs';
                 Object.keys(data).forEach((key, index) => {
@@ -282,7 +337,7 @@
 
             function renderProjectsPage() {
                 clearPageContent();
-                unsubscribeListeners(); // Unsubscribe old listeners
+                unsubscribeListeners();
                 pageContentDiv.innerHTML = `
                     <h2 class="text-3xl font-semibold mb-6">Research Projects</h2>
                     ${userRole === 'Admin' || userRole === 'Staff' ? `
@@ -463,7 +518,6 @@
                                 await storageRef.put(file);
                                 data.fileUrl = await storageRef.getDownloadURL();
                             }
-
                             await db.collection(`/artifacts/${appId}/public/data/grants`).add(data);
                             await addAuditLog('Grant added');
                             showMessage('Grant added successfully!');
@@ -678,7 +732,7 @@
                     });
                 }
             }
-
+            
             function listenForMobility() {
                 const q = db.collection(`/artifacts/${appId}/public/data/mobility`);
                 const unsubscribe = q.onSnapshot((querySnapshot) => {
@@ -713,11 +767,8 @@
                 unsubscribeFunctions.push(unsubscribe);
             }
 
-            // --- General Listeners and Helpers ---
             function attachCrudListeners(collectionName) {
                 const pageElement = document.getElementById('page-content');
-                
-                // Add listener for delete buttons
                 pageElement.querySelectorAll(`.delete-${collectionName}-btn`).forEach(btn => {
                     btn.addEventListener('click', async () => {
                         const id = btn.dataset.id;
@@ -733,8 +784,6 @@
                         }
                     });
                 });
-                
-                // Add listener for update buttons (placeholder for now)
                 pageElement.querySelectorAll(`.update-${collectionName}-btn`).forEach(btn => {
                     btn.addEventListener('click', async () => {
                         const id = btn.dataset.id;
@@ -743,7 +792,6 @@
                 });
             }
 
-            // Custom modal for confirmation instead of alert/confirm
             function confirmModal(message) {
                 const modal = document.createElement('div');
                 modal.className = 'fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex justify-center items-center z-50';
@@ -767,14 +815,8 @@
                 `;
                 document.body.appendChild(modal);
                 return new Promise(resolve => {
-                    document.getElementById('modal-confirm-btn').addEventListener('click', () => {
-                        modal.remove();
-                        resolve(true);
-                    });
-                    document.getElementById('modal-cancel-btn').addEventListener('click', () => {
-                        modal.remove();
-                        resolve(false);
-                    });
+                    document.getElementById('modal-confirm-btn').addEventListener('click', () => { modal.remove(); resolve(true); });
+                    document.getElementById('modal-cancel-btn').addEventListener('click', () => { modal.remove(); resolve(false); });
                 });
             }
 
@@ -782,7 +824,6 @@
                 unsubscribeFunctions.forEach(unsub => unsub());
                 unsubscribeFunctions = [];
             }
-
             async function addAuditLog(action) {
                 if (!isAuthReady) return;
                 try {
@@ -796,27 +837,9 @@
                 }
             }
 
-            function setupNavigation() {
-                document.getElementById('dashboard-btn').addEventListener('click', renderDashboard);
-                document.getElementById('projects-btn').addEventListener('click', renderProjectsPage);
-                document.getElementById('grants-btn').addEventListener('click', renderGrantsPage);
-                document.getElementById('mou-btn').addEventListener('click', renderMouPage);
-                document.getElementById('mobility-btn').addEventListener('click', renderMobilityPage);
-                document.getElementById('users-btn').addEventListener('click', renderUsersPage);
-                document.getElementById('reports-btn').addEventListener('click', renderReportsPage);
-                document.getElementById('logout-btn').addEventListener('click', async () => {
-                    await auth.signOut();
-                    showMessage('Logged out successfully.');
-                });
-            }
-            
             async function renderUsersPage() {
                 clearPageContent();
-                if (userRole !== 'Admin') {
-                    pageContentDiv.innerHTML = `<p class="text-red-500 font-semibold text-lg">You do not have permission to view this page.</p>`;
-                    return;
-                }
-                
+                if (userRole !== 'Admin') { pageContentDiv.innerHTML = `<p class="text-red-500 font-semibold text-lg">You do not have permission to view this page.</p>`; return; }
                 const userManagementHtml = `
                     <h2 class="text-3xl font-semibold mb-6">User Management</h2>
                     <div class="bg-white p-6 rounded-lg shadow-lg">
@@ -833,7 +856,6 @@
                     </div>
                 `;
                 pageContentDiv.innerHTML = userManagementHtml;
-                
                 listenForUsers();
                 document.getElementById('search-user').addEventListener('input', (e) => {
                     const searchTerm = e.target.value.toLowerCase();
@@ -848,37 +870,29 @@
                     });
                 });
             }
-
             function listenForUsers() {
                 const q = db.collectionGroup('roles');
                 const unsubscribe = q.onSnapshot(querySnapshot => {
                     const userListEl = document.getElementById('user-list');
                     if (!userListEl) return;
                     userListEl.innerHTML = '';
-                    if (querySnapshot.empty) {
-                        userListEl.innerHTML = '<p class="text-gray-500">No users found.</p>';
-                        return;
-                    }
-
+                    if (querySnapshot.empty) { userListEl.innerHTML = '<p class="text-gray-500">No users found.</p>'; return; }
                     querySnapshot.forEach(doc => {
                         const userData = doc.data();
                         const userUid = doc.id;
-                        
                         const userElement = document.createElement('div');
                         userElement.className = 'user-item p-4 border border-gray-200 rounded-lg flex justify-between items-start cursor-pointer hover:bg-gray-100 transition-colors duration-200';
                         userElement.dataset.uid = userUid;
                         userElement.addEventListener('click', () => renderUserDetailPage(userUid));
-                        
                         userElement.innerHTML = `
                             <div>
                                 <h4 class="user-email text-lg font-medium">${userData.email || 'Email not available'}</h4>
-                                <p class="text-sm text-gray-600">Role: <span class="font-semibold">${userData.role}</span></p>
+                                <p class="text-sm text-gray-600">Role: <span class="font-semibold">${userData.role}</span> | Plan: <span class="font-semibold">${userData.plan || 'N/A'}</span></p>
                                 <p class="text-xs text-gray-500 mt-1">UID: ${userUid}</p>
                             </div>
                         `;
                         userListEl.appendChild(userElement);
                     });
-
                 }, error => {
                     console.error("Error listening for users:", error);
                     showMessage("Failed to load users. Check console for details.", "error");
@@ -889,12 +903,8 @@
             async function renderUserDetailPage(uid) {
                 clearPageContent();
                 const userRoleDoc = await db.collection(`/artifacts/${appId}/users/${uid}/roles`).doc(uid).get();
-                if (!userRoleDoc.exists) {
-                    showMessage("User not found.", "error");
-                    return;
-                }
+                if (!userRoleDoc.exists) { showMessage("User not found.", "error"); return; }
                 const userData = userRoleDoc.data();
-
                 const userDetailHtml = `
                     <h2 class="text-3xl font-semibold mb-6">User Details</h2>
                     <div class="bg-white p-6 rounded-lg shadow-lg space-y-4">
@@ -909,6 +919,10 @@
                         <div>
                             <p class="text-sm text-gray-500">Current Role</p>
                             <p class="font-medium">${userData.role}</p>
+                        </div>
+                        <div>
+                            <p class="text-sm text-gray-500">Current Plan</p>
+                            <p class="font-medium">${userData.plan || 'N/A'}</p>
                         </div>
                         <div class="border-t border-gray-200 pt-4">
                             <h3 class="text-xl font-semibold mb-4">Update Role</h3>
@@ -932,10 +946,7 @@
                     </div>
                 `;
                 pageContentDiv.innerHTML = userDetailHtml;
-
-                // Set the initial role in the select dropdown
                 document.getElementById('new-user-role-select').value = userData.role;
-
                 setupUpdateRoleListener(uid);
                 setupDeleteUserListener(uid);
             }
@@ -961,9 +972,6 @@
                 const button = document.getElementById('delete-user-btn');
                 button.addEventListener('click', async () => {
                     if (await confirmModal(`Are you sure you want to delete this user?`)) {
-                        // In a real app, this would be a Firebase Cloud Function
-                        // as you cannot delete users directly from client-side code
-                        // for security reasons. This is a placeholder for now.
                         showMessage(`Attempting to delete user with UID: ${uid}. This feature is disabled in the prototype for security.`, 'error');
                     }
                 });
@@ -971,11 +979,7 @@
             
             async function renderReportsPage() {
                 clearPageContent();
-                if (userRole !== 'Admin') {
-                    pageContentDiv.innerHTML = `<p class="text-red-500 font-semibold text-lg">You do not have permission to view this page.</p>`;
-                    return;
-                }
-                
+                if (userRole !== 'Admin') { pageContentDiv.innerHTML = `<p class="text-red-500 font-semibold text-lg">You do not have permission to view this page.</p>`; return; }
                 const reportsHtml = `
                     <h2 class="text-3xl font-semibold mb-6">Detailed Reports</h2>
                     <div class="bg-white p-6 rounded-lg shadow-lg">
@@ -999,11 +1003,7 @@
                     </div>
                 `;
                 pageContentDiv.innerHTML = reportsHtml;
-                
-                // Load data for the report table
-                if (isAuthReady) {
-                    loadProjectsReport();
-                }
+                if (isAuthReady) { loadProjectsReport(); }
             }
 
             async function loadProjectsReport() {
@@ -1013,26 +1013,17 @@
                     const projectsRef = db.collection(`/artifacts/${appId}/public/data/projects`);
                     const projectsSnapshot = await projectsRef.get();
                     const projects = projectsSnapshot.docs.map(doc => doc.data());
-                    
-                    if (projects.length === 0) {
-                        tableBody.innerHTML = '<tr><td colspan="5" class="text-center py-4">No projects found.</td></tr>';
-                        return;
-                    }
-
+                    if (projects.length === 0) { tableBody.innerHTML = '<tr><td colspan="5" class="text-center py-4">No projects found.</td></tr>'; return; }
                     tableBody.innerHTML = '';
                     for (const project of projects) {
                         let grantAmount = 'N/A';
                         if (project.grant) {
                             const grantRef = db.collection(`/artifacts/${appId}/public/data/grants`).where('name', '==', project.grant);
                             const grantSnapshot = await grantRef.get();
-                            if (!grantSnapshot.empty) {
-                                grantAmount = `$${grantSnapshot.docs[0].data().amount.toLocaleString()}`;
-                            }
+                            if (!grantSnapshot.empty) { grantAmount = `$${grantSnapshot.docs[0].data().amount.toLocaleString()}`; }
                         }
-
                         const row = document.createElement('tr');
                         row.className = 'border-b border-gray-200 hover:bg-gray-100';
-
                         row.innerHTML = `
                             <td class="px-4 py-2">${project.name}</td>
                             <td class="px-4 py-2">${project.status}</td>
@@ -1042,13 +1033,11 @@
                         `;
                         tableBody.appendChild(row);
                     }
-
                 } catch (error) {
                     console.error("Error loading projects report:", error);
                     tableBody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-red-500">Failed to load report.</td></tr>';
                 }
             }
-
 
             function setupNavigation() {
                 document.getElementById('dashboard-btn').addEventListener('click', renderDashboard);
@@ -1058,13 +1047,10 @@
                 document.getElementById('mobility-btn').addEventListener('click', renderMobilityPage);
                 document.getElementById('users-btn').addEventListener('click', renderUsersPage);
                 document.getElementById('reports-btn').addEventListener('click', renderReportsPage);
-                document.getElementById('logout-btn').addEventListener('click', async () => {
-                    await auth.signOut();
-                    showMessage('Logged out successfully.');
-                });
+                document.getElementById('upgrade-btn').addEventListener('click', () => renderSubscribePage(userId));
+                document.getElementById('logout-btn').addEventListener('click', async () => { await auth.signOut(); showMessage('Logged out successfully.'); });
             }
             
-            // --- Initialization & Auth State Management ---
             auth.onAuthStateChanged(async (user) => {
                 isAuthReady = false;
                 unsubscribeListeners();
@@ -1075,14 +1061,15 @@
                         const docSnap = await userRoleDocRef.get();
                         if (docSnap.exists) {
                             userRole = docSnap.data().role;
-                            updateNav(true, userRole);
+                            userPlan = docSnap.data().plan;
+                            updateNav(true, userRole, userPlan);
                             isAuthReady = true;
-                            // Check if a page has been rendered already
-                            if (!pageContentDiv.innerHTML.trim()) {
+                            if (docSnap.data().plan === 'Free') {
+                                renderSubscribePage(userId);
+                            } else if (!pageContentDiv.innerHTML.trim()) {
                                 renderDashboard();
                             }
                         } else {
-                            // If role document doesn't exist, assume a default role or log out
                             console.warn("User role not found. Logging out.");
                             await auth.signOut();
                         }
@@ -1093,6 +1080,7 @@
                 } else {
                     userId = null;
                     userRole = null;
+                    userPlan = null;
                     updateNav(false);
                     renderLoginPage();
                 }
