@@ -46,13 +46,13 @@
         
         <script>
             const firebaseConfig = {
-              apiKey: "AIzaSyAsMnPa_cUvJd4NZPlTYP_7UXlguFlNXwM",
-              authDomain: "intellresearch.firebaseapp.com",
-              projectId: "intellresearch",
-              storageBucket: "intellresearch.firebasestorage.app",
-              messagingSenderId: "795386655637",
-              appId: "1:795386655637:web:d969900a5897063949fc9c",
-              measurementId: "G-TD95MWR2RN"
+                apiKey: "AIzaSyAsMnPa_cUvJd4NZPlTYP_7UXlguFlNXwM",
+                authDomain: "intellresearch.firebaseapp.com",
+                projectId: "intellresearch",
+                storageBucket: "intellresearch.firebasestorage.app",
+                messagingSenderId: "795386655637",
+                appId: "1:795386655637:web:d969900a5897063949fc9c",
+                measurementId: "G-TD95MWR2RN"
             };
             const appId = "intellresearch";
             const app = firebase.initializeApp(firebaseConfig);
@@ -63,7 +63,7 @@
             let userId = null;
             let userRole = null;
             let userPlan = null;
-            let userGroupId = null; // New field to store the user's organization/group ID
+            let userGroupId = null;
             let isAuthReady = false;
             let unsubscribeFunctions = [];
 
@@ -160,14 +160,14 @@
                         const email = document.getElementById('email').value;
                         const password = document.getElementById('password').value;
                         const role = document.getElementById('role').value;
-                        const groupId = document.getElementById('groupId').value; // Get the Group ID
+                        const groupId = document.getElementById('groupId').value;
                         try {
                             const userCredential = await auth.createUserWithEmailAndPassword(email, password);
                             await db.collection(`/artifacts/${appId}/users/${userCredential.user.uid}/roles`).doc(userCredential.user.uid).set({
                                 role: role,
                                 email: email,
                                 plan: 'Free',
-                                groupId: groupId, // Save the Group ID
+                                groupId: groupId,
                             });
                             showMessage('Registration successful! Redirecting to plan selection...', 'info');
                             renderSubscribePage(userCredential.user.uid);
@@ -178,7 +178,7 @@
                     });
                 }
             }
-            
+
             async function renderSubscribePage(uid) {
                 clearPageContent();
                 const subscribeHtml = `
@@ -219,7 +219,7 @@
                                 </ul>
                                 <button data-plan="Group" class="w-full py-2 px-4 rounded-md text-white bg-blue-600 hover:bg-blue-700 font-semibold">Choose Plan</button>
                             </div>
-                             <div class="border p-6 rounded-lg shadow-md text-center">
+                            <div class="border p-6 rounded-lg shadow-md text-center">
                                 <h3 class="text-xl font-bold mb-2">Institutional</h3>
                                 <p class="text-gray-500 mb-4">Universities, Research Institutes</p>
                                 <p class="text-3xl font-bold mb-4">Custom</p>
@@ -308,7 +308,7 @@
                     }
                 }
             }
-            
+
             function renderSimpleChart(elementId, data) {
                 const chartElement = document.getElementById(elementId);
                 chartElement.innerHTML = '';
@@ -341,24 +341,20 @@
                 chartElement.parentNode.appendChild(legend);
             }
 
-            // Central function to get the correct query based on user's role and group
             function getFilteredQuery(collectionName) {
                 const collectionRef = db.collection(`/artifacts/${appId}/public/data/${collectionName}s`);
                 
                 if (userRole === 'Admin') {
                     return collectionRef;
                 } else if (userRole === 'Staff') {
-                    // Staff can only see items from their group
                     return collectionRef.where('groupId', '==', userGroupId);
                 } else if (userRole === 'Researcher') {
-                    // Researchers can only see items they created
                     return collectionRef.where('userId', '==', userId);
                 } else {
-                    return collectionRef.limit(0); // Return an empty query for other roles
+                    return collectionRef.limit(0);
                 }
             }
-            
-            // --- Projects Page ---
+
             function renderProjectsPage() {
                 clearPageContent();
                 unsubscribeListeners();
@@ -420,7 +416,7 @@
                             description: document.getElementById('project-description').value,
                             createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                             userId: userId,
-                            groupId: userGroupId, // Save the user's Group ID
+                            groupId: userGroupId,
                             appId: appId
                         };
                         try {
@@ -435,9 +431,9 @@
                     });
                 }
             }
-            
+
             function listenForProjects() {
-                const q = getFilteredQuery('project'); // Use the new function to get the query
+                const q = getFilteredQuery('project');
                 const unsubscribe = q.onSnapshot((querySnapshot) => {
                     const projectList = document.getElementById('project-list');
                     if (!projectList) return;
@@ -470,8 +466,7 @@
                 });
                 unsubscribeFunctions.push(unsubscribe);
             }
-            
-            // --- Grants Page ---
+
             function renderGrantsPage() {
                 clearPageContent();
                 unsubscribeListeners();
@@ -535,7 +530,7 @@
                             status: document.getElementById('grant-status').value,
                             createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                             userId: userId,
-                            groupId: userGroupId, // Save the user's Group ID
+                            groupId: userGroupId,
                             appId: appId
                         };
                         try {
@@ -556,8 +551,9 @@
                     });
                 }
             }
+
             function listenForGrants() {
-                const q = getFilteredQuery('grant'); // Use the new function to get the query
+                const q = getFilteredQuery('grant');
                 const unsubscribe = q.onSnapshot((querySnapshot) => {
                     const grantList = document.getElementById('grant-list');
                     if (!grantList) return;
@@ -590,8 +586,7 @@
                 });
                 unsubscribeFunctions.push(unsubscribe);
             }
-            
-            // --- MOU Page ---
+
             function renderMouPage() {
                 clearPageContent();
                 unsubscribeListeners();
@@ -642,7 +637,7 @@
                             status: document.getElementById('mou-status').value,
                             createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                             userId: userId,
-                            groupId: userGroupId, // Save the user's Group ID
+                            groupId: userGroupId,
                             appId: appId
                         };
                         try {
@@ -659,7 +654,8 @@
             }
 
             function listenForMous() {
-                const q = getFilteredQuery('mou'); // Use the new function to get the query
+                // CHANGE: Use the new getFilteredQuery function
+                const q = getFilteredQuery('mou');
                 const unsubscribe = q.onSnapshot((querySnapshot) => {
                     const mouList = document.getElementById('mou-list');
                     if (!mouList) return;
@@ -692,7 +688,6 @@
                 unsubscribeFunctions.push(unsubscribe);
             }
 
-            // --- Mobility Page ---
             function renderMobilityPage() {
                 clearPageContent();
                 unsubscribeListeners();
@@ -747,7 +742,7 @@
                             date: document.getElementById('mobility-date').value,
                             createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                             userId: userId,
-                            groupId: userGroupId, // Save the user's Group ID
+                            groupId: userGroupId,
                             appId: appId
                         };
                         try {
@@ -762,9 +757,10 @@
                     });
                 }
             }
-            
+
             function listenForMobility() {
-                const q = getFilteredQuery('mobility'); // Use the new function to get the query
+                // CHANGE: Use the new getFilteredQuery function
+                const q = getFilteredQuery('mobility');
                 const unsubscribe = q.onSnapshot((querySnapshot) => {
                     const mobilityList = document.getElementById('mobility-list');
                     if (!mobilityList) return;
@@ -1006,7 +1002,7 @@
                     }
                 });
             }
-            
+
             async function renderReportsPage() {
                 clearPageContent();
                 if (userRole !== 'Admin') { pageContentDiv.innerHTML = `<p class="text-red-500 font-semibold text-lg">You do not have permission to view this page.</p>`; return; }
@@ -1040,7 +1036,7 @@
                 const tableBody = document.getElementById('projects-report-table-body');
                 tableBody.innerHTML = '<tr><td colspan="5" class="text-center py-4">Loading reports...</td></tr>';
                 try {
-                    const projectsRef = getFilteredQuery('project'); // Use the new function to get the query
+                    const projectsRef = getFilteredQuery('project');
                     const projectsSnapshot = await projectsRef.get();
                     const projects = projectsSnapshot.docs.map(doc => doc.data());
                     if (projects.length === 0) { tableBody.innerHTML = '<tr><td colspan="5" class="text-center py-4">No projects found.</td></tr>'; return; }
@@ -1078,9 +1074,9 @@
                 document.getElementById('users-btn').addEventListener('click', renderUsersPage);
                 document.getElementById('reports-btn').addEventListener('click', renderReportsPage);
                 document.getElementById('upgrade-btn').addEventListener('click', () => renderSubscribePage(userId));
-                document.getElementById('logout-btn').addEventListener('click', async () => { await auth.signOut(); showMessage('Logged out successfully.'); });
+                document.getElementById('logout-btn').addEventListener('click', async () => { auth.signOut(); showMessage('Logged out successfully.'); });
             }
-            
+
             auth.onAuthStateChanged(async (user) => {
                 isAuthReady = false;
                 unsubscribeListeners();
@@ -1092,13 +1088,15 @@
                         if (docSnap.exists) {
                             userRole = docSnap.data().role;
                             userPlan = docSnap.data().plan;
-                            userGroupId = docSnap.data().groupId; // Retrieve the user's Group ID
+                            userGroupId = docSnap.data().groupId;
                             updateNav(true, userRole, userPlan);
                             isAuthReady = true;
-                            if (docSnap.data().plan === 'Free') {
+                            if (userPlan === 'Free') {
                                 renderSubscribePage(userId);
-                            } else if (!pageContentDiv.innerHTML.trim()) {
-                                renderDashboard();
+                            } else {
+                                if (!pageContentDiv.innerHTML.trim()) {
+                                    renderDashboard();
+                                }
                             }
                         } else {
                             console.warn("User role not found. Logging out.");
